@@ -71,7 +71,6 @@ class SatelliteImageDataset(Dataset):
         self.transform = transform
         self.img_labels = os.listdir(img_dir)
 
-
     def __len__(self):
         return len(self.img_labels)
 
@@ -129,8 +128,9 @@ class RsBlock(nn.Module):
         return out
 ### ***************************************************************
 # -------- Net complete architecture ------------------------
-# Complete build
-# ---------------------------------------------
+# Complete architecture 
+# 1st layer + RsBlocks (with skip and downsample) + Fc
+# ------------------------------------------------------------
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
@@ -188,7 +188,9 @@ def imshow(img):
     print(img.shape)
     plt.imshow(np.transpose(npimg, (1,2,0)))
     plt.show()
+    
 ### ***************************************************************
+### Splitting dataset for test and train
 
 path = f"images/data"
 sid = SatelliteImageDataset(path,True)
@@ -196,6 +198,7 @@ un_sid = SatelliteImageDataset(path,False)
 train_size = int(0.8 * len(sid)) # ---- training with 80% of total data
 test_size = len(sid) - train_size # ---- testing with 20% of total data
 train_dataset, test_dataset = torch.utils.data.random_split(sid, [train_size, test_size])
+
 ### ***************************************************************
 ### ***************************************************************
 #### ------------------------------- Save Split Datasets to folder for test later
@@ -212,8 +215,8 @@ def save_dataset_subset(dataset_subset, target_dir, original_dir):
         # Copy the image from the source to the destination
         shutil.copy(src_file_path, dst_file_path)      
         
-train_dir = 'images/train'
-test_dir = 'images/test'
+train_dir = 'images/training_set'
+test_dir = 'images/testing_set'
 # Create the directories if they don't exist
 if not os.path.exists(train_dir):
     os.makedirs(train_dir)
@@ -271,7 +274,7 @@ net.to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(net.parameters(),lr=.0001,weight_decay=1e-4)
 scheduler = ReduceLROnPlateau(optimizer, 'min',factor=0.5, patience=10, verbose=True)
-epochs = 2
+epochs = 120
 n_total_steps = len(train_loader)
 labels1 = []
 preds = []
@@ -312,7 +315,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         # print statistics
         running_loss += loss.item()
         ### ***********************************************
-        # mini-batch contains 32 samples from your dataset
+        # mini-batch contains 32 samples from test dataset
         ### ***********************************************
         if i % 5 == 4:    # print every 5 mini-batches
             print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 5:.3f}')
@@ -324,6 +327,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
     total = 0
         # since we're not training, we don't need to calculate the gradients for our outputs
     valid_loss = 0.0
+    
     ### ***************************************************************
 
     with torch.no_grad():
@@ -358,6 +362,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
                 class_predictions = [F.softmax(output,dim=0) for output in outputs]
                 preds.append(class_predictions)
                 labels1.append(predicted)
+                
 ### ***************************************************************
                 
 
@@ -376,7 +381,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         if epoch_accuracy > best_accuracy: # --- check accuracy for best test accuracy score
             best_accuracy = epoch_accuracy
             best_model_weights = copy.deepcopy(net.state_dict()) # --- make a copy of weights of the best model for calculation use later
-            torch.save(best_model_weights, 'saved_best_model_weights/FL_model_test.pth') # --- saving the best model weights to a file
+            torch.save(best_model_weights, 'saved_best_model_weights/FL_model_best.pth') # --- saving the best model weights to a file
             print("New best model found and saved.")
         ### ********************************************************************************************
         ### *************************** Best Training Model Saved to File ******************************
@@ -399,6 +404,7 @@ with torch.no_grad(): ## -- run model without grad descent
 
 cm = confusion_matrix(y_true, y_pred)
 print(cm)
+
 df_cm = pd.DataFrame(cm, index=[i for i in values_map.values()],
                      columns=[i for i in values_map.values()])
 
@@ -411,7 +417,7 @@ sn.heatmap(df_cm, annot=True, fmt='g')
 plt.title('STD Confusion Matrix')
 plt.ylabel('True label')
 plt.xlabel('Predicted label')
-plt.savefig('best_model_SCF_test.png')  # Save the standard confusion matrix plot
+plt.savefig('best_model_SCF_best.png')  # Save the standard confusion matrix plot
 plt.show()
 
 # Plotting normalized confusion matrix
@@ -420,7 +426,7 @@ sn.heatmap(df_cm2, annot=True, cmap='Blues', fmt='.2%')
 plt.title('Normalized Confusion Matrix')
 plt.ylabel('True label')
 plt.xlabel('Predicted label')
-plt.savefig('best_model_NCF_test.png')  # Save the normalized confusion matrix plot
+plt.savefig('best_model_NCF_best.png')  # Save the normalized confusion matrix plot
 plt.show()
 #plt.savefig('best_model_conf_mat.png')
 
